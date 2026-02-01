@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>PurpleStock</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+:root{
+  --roxo:#7C3AED;
+  --roxo-dark:#5B21B6;
+  --bg:#F5F3FF;
+  --card:#FFFFFF;
+  --text:#1F2937;
+  --muted:#6B7280;
+  --line:#E5E7EB;
+  --ok:#22C55E;
+  --low:#EF4444;
+}
+
+*{box-sizing:border-box;font-family:'Inter',sans-serif}
+
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--text);
+}
+
+/* HEADER */
+header{
+  background:linear-gradient(135deg,var(--roxo),var(--roxo-dark));
+  color:white;
+  padding:24px 20px;
+  border-bottom-left-radius:28px;
+  border-bottom-right-radius:28px;
+}
+
+header h1{
+  margin:0;
+  font-size:22px;
+}
+
+header p{
+  margin:6px 0 0;
+  font-size:14px;
+  opacity:.9;
+}
+
+/* CONTAINER */
+.container{
+  padding:20px;
+}
+
+/* CARDS */
+.card{
+  background:var(--card);
+  border-radius:20px;
+  padding:18px;
+  margin-bottom:16px;
+  box-shadow:0 12px 30px rgba(0,0,0,.08);
+}
+
+/* DASHBOARD */
+.kpis{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:10px;
+}
+
+.kpi{
+  background:var(--card);
+  border-radius:16px;
+  padding:14px;
+  text-align:center;
+}
+
+.kpi span{
+  font-size:12px;
+  color:var(--muted);
+}
+
+.kpi strong{
+  display:block;
+  font-size:20px;
+  margin-top:6px;
+}
+
+/* FORM */
+input,select,button{
+  width:100%;
+  padding:14px;
+  border-radius:14px;
+  border:1px solid var(--line);
+  margin-bottom:10px;
+  font-size:14px;
+}
+
+button{
+  background:var(--roxo);
+  color:white;
+  border:none;
+  font-weight:600;
+}
+
+button:active{transform:scale(.98)}
+
+/* TABLE (MOBILE STYLE) */
+.list{
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+}
+
+.item{
+  border:1px solid var(--line);
+  border-radius:16px;
+  padding:14px;
+}
+
+.item h4{
+  margin:0 0 6px;
+}
+
+.badge{
+  padding:4px 10px;
+  border-radius:999px;
+  font-size:12px;
+  color:white;
+}
+
+.ok{background:var(--ok)}
+.low{background:var(--low)}
+
+.actions{
+  display:flex;
+  gap:10px;
+  margin-top:10px;
+}
+
+.actions button{
+  flex:1;
+  padding:10px;
+}
+
+/* SECTION TITLE */
+.section-title{
+  font-size:16px;
+  font-weight:600;
+  margin:20px 0 10px;
+}
+
+/* HISTORY */
+.history-item{
+  border-bottom:1px solid var(--line);
+  padding:10px 0;
+}
+
+.history-item:last-child{border:none}
+
+small{color:var(--muted)}
+</style>
+</head>
+
+<body>
+
+<header>
+  <h1>🟣 PurpleStock</h1>
+  <p>Controle de estoque simples e inteligente</p>
+</header>
+
+<div class="container">
+
+  <!-- DASHBOARD -->
+  <div class="kpis">
+    <div class="kpi"><span>Produtos</span><strong id="totalProdutos">0</strong></div>
+    <div class="kpi"><span>Estoque</span><strong id="totalEstoque">0</strong></div>
+    <div class="kpi"><span>Baixo</span><strong id="estoqueBaixo">0</strong></div>
+  </div>
+
+  <div class="card">
+    <canvas id="graficoCategorias"></canvas>
+  </div>
+
+  <!-- CADASTRO -->
+  <div class="section-title">Adicionar Produto</div>
+  <div class="card">
+    <input id="nome" placeholder="Nome do produto">
+    <input id="categoria" placeholder="Categoria">
+    <input id="quantidade" type="number" placeholder="Quantidade inicial">
+    <input id="minimo" type="number" placeholder="Estoque mínimo">
+    <button onclick="addProduto()">Salvar produto</button>
+  </div>
+
+  <!-- FILTRO -->
+  <select id="filtroCategoria" onchange="renderProdutos()">
+    <option value="">Todas categorias</option>
+  </select>
+
+  <!-- ESTOQUE -->
+  <div class="section-title">Estoque</div>
+  <div class="list" id="listaProdutos"></div>
+
+  <!-- HISTÓRICO -->
+  <div class="section-title">Histórico</div>
+  <div class="card">
+    <input type="date" id="dataInicio">
+    <input type="date" id="dataFim">
+    <button onclick="renderHistorico()">Filtrar</button>
+
+    <div id="historico"></div>
+  </div>
+
+</div>
+
+<script>
+let produtos = JSON.parse(localStorage.getItem('produtos')) || [];
+let historico = JSON.parse(localStorage.getItem('historico')) || [];
+
+function salvar(){
+  localStorage.setItem('produtos',JSON.stringify(produtos));
+  localStorage.setItem('historico',JSON.stringify(historico));
+  renderTudo();
+}
+
+function addProduto(){
+  produtos.push({
+    nome:nome.value,
+    categoria:categoria.value,
+    quantidade:+quantidade.value,
+    minimo:+minimo.value
+  });
+  historico.push({data:new Date(),produto:nome.value,tipo:'Entrada',qtd:+quantidade.value});
+  salvar();
+}
+
+function movimentar(i,tipo){
+  let qtd=+prompt("Quantidade:");
+  if(!qtd)return;
+  produtos[i].quantidade+=tipo==='Entrada'?qtd:-qtd;
+  historico.push({data:new Date(),produto:produtos[i].nome,tipo,qtd});
+  salvar();
+}
+
+function renderProdutos(){
+  listaProdutos.innerHTML='';
+  filtroCategoria.innerHTML='<option value="">Todas categorias</option>';
+  [...new Set(produtos.map(p=>p.categoria))].forEach(c=>{
+    filtroCategoria.innerHTML+=`<option>${c}</option>`;
+  });
+
+  produtos.filter(p=>!filtroCategoria.value||p.categoria===filtroCategoria.value)
+  .forEach((p,i)=>{
+    listaProdutos.innerHTML+=`
+      <div class="item">
+        <h4>${p.nome}</h4>
+        <small>${p.categoria}</small><br><br>
+        <span class="badge ${p.quantidade<=p.minimo?'low':'ok'}">
+          ${p.quantidade<=p.minimo?'Estoque baixo':'OK'}
+        </span>
+        <div class="actions">
+          <button onclick="movimentar(${i},'Entrada')">Entrada</button>
+          <button onclick="movimentar(${i},'Saída')">Saída</button>
+        </div>
+      </div>`;
+  });
+}
+
+function renderHistorico(){
+  historicoEl.innerHTML='';
+  let ini=new Date(dataInicio.value||'1900-01-01');
+  let fim=new Date(dataFim.value||'2999-12-31');
+
+  historico.filter(h=>new Date(h.data)>=ini && new Date(h.data)<=fim)
+  .forEach(h=>{
+    historicoEl.innerHTML+=`
+      <div class="history-item">
+        <strong>${h.produto}</strong><br>
+        <small>${h.tipo} • ${h.qtd} • ${new Date(h.data).toLocaleString()}</small>
+      </div>`;
+  });
+}
+
+function renderDashboard(){
+  totalProdutos.innerText=produtos.length;
+  totalEstoque.innerText=produtos.reduce((a,b)=>a+b.quantidade,0);
+  estoqueBaixo.innerText=produtos.filter(p=>p.quantidade<=p.minimo).length;
+
+  new Chart(graficoCategorias,{
+    type:'doughnut',
+    data:{
+      labels:[...new Set(produtos.map(p=>p.categoria))],
+      datasets:[{data:produtos.map(p=>p.quantidade),backgroundColor:['#7C3AED','#A78BFA','#C4B5FD']}]
+    }
+  });
+}
+
+function renderTudo(){
+  renderProdutos();
+  renderHistorico();
+  renderDashboard();
+}
+
+renderTudo();
+</script>
+
+</body>
+</html>
